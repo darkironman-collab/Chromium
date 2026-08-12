@@ -50,7 +50,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Sparse-checkout Chromium and apply privacy patches
-        run: ./scripts/validate_upstream.sh
+        run: bash ./scripts/validate_upstream.sh
 
   build-android:
     if: github.event_name == 'workflow_dispatch' && inputs.full_build
@@ -75,7 +75,7 @@ jobs:
           fi
 
       - name: Fetch Chromium
-        run: ./scripts/fetch_chromium.sh
+        run: bash ./scripts/fetch_chromium.sh
 
       - name: Apply Extreme Privacy patches
         run: python3 ./scripts/apply_privacy_patches.py ./work/chromium/src
@@ -85,7 +85,7 @@ jobs:
         run: git diff --stat && git diff --check
 
       - name: Build ARM64 browser APK
-        run: ./scripts/build_android.sh ./work/chromium/src
+        run: bash ./scripts/build_android.sh ./work/chromium/src
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
