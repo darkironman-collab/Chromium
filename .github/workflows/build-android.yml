@@ -36,14 +36,25 @@ jobs:
           python3 -m py_compile scripts/apply_privacy_patches.py
           bash -n scripts/fetch_chromium.sh
           bash -n scripts/build_android.sh
+          bash -n scripts/validate_upstream.sh
       - name: Verify required files
         run: |
           test -s overlay/chrome/android/java/src/org/chromium/chrome/browser/privacy/ExtremeVpnGuard.java
           test -s scripts/apply_privacy_patches.py
 
+  validate-upstream:
+    runs-on: ubuntu-latest
+    needs: validate-overlay
+    env:
+      CHROMIUM_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.chromium_ref || 'main' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sparse-checkout Chromium and apply privacy patches
+        run: ./scripts/validate_upstream.sh
+
   build-android:
     if: github.event_name == 'workflow_dispatch' && inputs.full_build
-    needs: validate-overlay
+    needs: [validate-overlay, validate-upstream]
     runs-on: ${{ fromJSON(inputs.runner_labels) }}
     timeout-minutes: 720
     env:
