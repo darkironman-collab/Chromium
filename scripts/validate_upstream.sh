@@ -15,6 +15,7 @@ git sparse-checkout init --no-cone
 cat > .git/info/sparse-checkout <<'EOF'
 /net/android/java/src/org/chromium/net/NetworkChangeNotifierAutoDetect.java
 /chrome/android/java/src/org/chromium/chrome/browser/ChromeApplicationImpl.java
+/chrome/android/java/src/org/chromium/chrome/browser/download/DownloadController.java
 /chrome/android/chrome_java_sources.gni
 /chrome/android/java/AndroidManifest.xml
 /chrome/browser/browser_process_impl.cc
