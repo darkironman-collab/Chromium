@@ -37,10 +37,14 @@ jobs:
           bash -n scripts/fetch_chromium.sh
           bash -n scripts/build_android.sh
           bash -n scripts/validate_upstream.sh
+          bash -n scripts/prepare_x64_builder.sh
+          bash -n scripts/register_github_runner.sh
       - name: Verify required files
         run: |
           test -s overlay/chrome/android/java/src/org/chromium/chrome/browser/privacy/ExtremeVpnGuard.java
           test -s scripts/apply_privacy_patches.py
+          test -s scripts/prepare_x64_builder.sh
+          test -s scripts/register_github_runner.sh
 
   validate-upstream:
     runs-on: ubuntu-latest
@@ -62,17 +66,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Preflight host
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(uname -m)" = "x86_64" || { echo 'Chromium Android build requires an x86-64 Linux host.'; exit 1; }
-          FREE_GB=$(df -Pk . | awk 'NR==2 {print int($4/1024/1024)}')
-          echo "Free disk: ${FREE_GB} GB"
-          if [ "$FREE_GB" -lt 100 ]; then
-            echo 'At least 100 GB free disk is required by Chromium Android build instructions.'
-            exit 1
-          fi
+      - name: Prepare and verify x64 builder
+        run: MIN_DISK_GB=150 MIN_RAM_GB=16 bash ./scripts/prepare_x64_builder.sh
 
       - name: Fetch Chromium
         run: bash ./scripts/fetch_chromium.sh
