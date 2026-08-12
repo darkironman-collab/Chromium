@@ -1,0 +1,87 @@
+name: Build Extreme Privacy Chromium
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'overlay/**'
+      - '.github/workflows/build-android.yml'
+  workflow_dispatch:
+    inputs:
+      chromium_ref:
+        description: 'Chromium ref/tag/commit (default: main)'
+        required: false
+        default: 'main'
+      runner_labels:
+        description: 'JSON array of x64 Linux runner labels'
+        required: false
+        default: '["self-hosted","linux","x64","chromium"]'
+      full_build:
+        description: 'Run full Chromium Android build'
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate-overlay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate scripts
+        run: |
+          python3 -m py_compile scripts/apply_privacy_patches.py
+          bash -n scripts/fetch_chromium.sh
+          bash -n scripts/build_android.sh
+      - name: Verify required files
+        run: |
+          test -s overlay/chrome/android/java/src/org/chromium/chrome/browser/privacy/ExtremeVpnGuard.java
+          test -s scripts/apply_privacy_patches.py
+
+  build-android:
+    if: github.event_name == 'workflow_dispatch' && inputs.full_build
+    needs: validate-overlay
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    timeout-minutes: 720
+    env:
+      CHROMIUM_REF: ${{ inputs.chromium_ref }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preflight host
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "x86_64" || { echo 'Chromium Android build requires an x86-64 Linux host.'; exit 1; }
+          FREE_GB=$(df -Pk . | awk 'NR==2 {print int($4/1024/1024)}')
+          echo "Free disk: ${FREE_GB} GB"
+          if [ "$FREE_GB" -lt 100 ]; then
+            echo 'At least 100 GB free disk is required by Chromium Android build instructions.'
+            exit 1
+          fi
+
+      - name: Fetch Chromium
+        run: ./scripts/fetch_chromium.sh
+
+      - name: Apply Extreme Privacy patches
+        run: python3 ./scripts/apply_privacy_patches.py ./work/chromium/src
+
+      - name: Show privacy diff
+        working-directory: work/chromium/src
+        run: git diff --stat && git diff --check
+
+      - name: Build ARM64 browser APK
+        run: ./scripts/build_android.sh ./work/chromium/src
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ExtremePrivacyBrowser-arm64
+          path: |
+            dist/ExtremePrivacyBrowser-arm64.apk
+            dist/ExtremePrivacyBrowser-arm64.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
