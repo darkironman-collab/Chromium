@@ -134,7 +134,7 @@ def patch_browser_process_vpn_guard(src: Path, repo_root: Path) -> None:
     entry = '  "java/src/org/chromium/chrome/browser/privacy/ExtremeVpnGuard.java",\n'
     if entry not in text:
         anchor = '  "java/src/org/chromium/chrome/browser/ChromeApplicationImpl.java",\n'
-        text = replace_once(text, anchor, anchor + entry, "chrome_java_sources.gni")
+        text = replace_once(text, anchor, anchor + entry, "chrome_java_sources.gni VPN guard")
         sources.write_text(text)
 
     manifest = src / "chrome/android/java/AndroidManifest.xml"
@@ -252,6 +252,48 @@ def patch_https_only_default(src: Path) -> None:
     print("enabled HTTPS-Only mode by default")
 
 
+def patch_download_chooser(src: Path, repo_root: Path) -> None:
+    source = repo_root / "overlay/chrome/android/java/src/org/chromium/chrome/browser/download/ExtremeDownloadChooser.java"
+    dest = src / "chrome/android/java/src/org/chromium/chrome/browser/download/ExtremeDownloadChooser.java"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, dest)
+
+    sources = src / "chrome/android/chrome_java_sources.gni"
+    text = sources.read_text()
+    entry = '  "java/src/org/chromium/chrome/browser/download/ExtremeDownloadChooser.java",\n'
+    if entry not in text:
+        anchor = '  "java/src/org/chromium/chrome/browser/download/DownloadController.java",\n'
+        text = replace_once(text, anchor, anchor + entry, "chrome_java_sources.gni download chooser")
+        sources.write_text(text)
+
+    controller = src / "chrome/android/java/src/org/chromium/chrome/browser/download/DownloadController.java"
+    text = controller.read_text()
+    if "EXTREME_PRIVACY_DOWNLOAD_CHOOSER" in text:
+        print("Download with chooser already installed")
+        return
+
+    signature = None
+    for candidate in (
+        "static void enqueueDownloadManagerRequest(final DownloadInfo info)",
+        "static void enqueueDownloadManagerRequest(DownloadInfo info)",
+    ):
+        if candidate in text:
+            signature = candidate
+            break
+    if signature is None:
+        fail("DownloadController.enqueueDownloadManagerRequest anchor missing")
+
+    body = '''        // EXTREME_PRIVACY_DOWNLOAD_CHOOSER: never hand off a download silently.
+        ExtremeDownloadChooser.show(
+                info,
+                () ->
+                        DownloadManagerService.getDownloadManagerService()
+                                .enqueueNewDownload(new DownloadItem(true, info), true));'''
+    text = replace_method_body(text, signature, body, "Download with chooser")
+    controller.write_text(text)
+    print("installed Download with chooser")
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         fail("usage: apply_privacy_patches.py /path/to/chromium/src")
@@ -267,6 +309,7 @@ def main() -> None:
     patch_search_suggestions_default(src)
     patch_preloading_default(src)
     patch_https_only_default(src)
+    patch_download_chooser(src, repo_root)
     print("Extreme Privacy Chromium patches applied successfully")
 
 
