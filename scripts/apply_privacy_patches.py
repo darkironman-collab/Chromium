@@ -87,7 +87,6 @@ def patch_vpn_network_discovery(src: Path) -> None:
         return new Network[0];'''
     text = replace_method_body(text, sig, vpn_body, "VPN network filtering")
 
-    # Force the current default network reported to native Chromium to be the same filtered VPN.
     default_sig = "public @Nullable Network getDefaultNetwork()"
     member = (
         "mConnectivityManagerWrapper"
@@ -160,7 +159,6 @@ def patch_metrics_reporting(src: Path) -> None:
             1,
         )
     else:
-        # Formatting changes across Chromium revisions; handle flexible whitespace.
         pattern = re.compile(
             r"registry->RegisterBooleanPref\(metrics::prefs::kMetricsReportingEnabled,\s*"
             r"GoogleUpdateSettings::GetCollectStatsConsent\(\)\);"
@@ -192,6 +190,68 @@ def patch_third_party_cookie_default(src: Path) -> None:
     print("set third-party cookies blocked by default")
 
 
+def patch_search_suggestions_default(src: Path) -> None:
+    path = src / "chrome/browser/profiles/profile.cc"
+    text = path.read_text()
+    if "EXTREME_PRIVACY_SEARCH_SUGGEST" in text:
+        print("search suggestions already disabled by default")
+        return
+    pattern = re.compile(
+        r"registry->RegisterBooleanPref\(\s*prefs::kSearchSuggestEnabled,\s*true,\s*"
+        r"user_prefs::PrefRegistrySyncable::SYNCABLE_PREF\);"
+    )
+    replacement = (
+        "registry->RegisterBooleanPref(\n"
+        "      prefs::kSearchSuggestEnabled, false,  // EXTREME_PRIVACY_SEARCH_SUGGEST\n"
+        "      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);"
+    )
+    text, count = pattern.subn(replacement, text, count=1)
+    if count != 1:
+        fail("search suggestion default anchor missing")
+    path.write_text(text)
+    print("disabled remote search suggestions by default")
+
+
+def patch_preloading_default(src: Path) -> None:
+    path = src / "chrome/browser/preloading/preloading_prefs.cc"
+    text = path.read_text()
+    if "EXTREME_PRIVACY_PRELOADING" in text:
+        print("preloading already disabled by default")
+        return
+    needle = "static_cast<int>(NetworkPredictionOptions::kDefault),"
+    if needle not in text:
+        fail("network prediction/preloading default anchor missing")
+    text = text.replace(
+        needle,
+        "static_cast<int>(NetworkPredictionOptions::kDisabled),  // EXTREME_PRIVACY_PRELOADING",
+        1,
+    )
+    path.write_text(text)
+    print("disabled DNS prefetch/preconnect/page preloading by default")
+
+
+def patch_https_only_default(src: Path) -> None:
+    path = src / "chrome/browser/ui/browser_ui_prefs.cc"
+    text = path.read_text()
+    if "EXTREME_PRIVACY_HTTPS_ONLY" in text:
+        print("HTTPS-Only already enabled by default")
+        return
+    pattern = re.compile(
+        r"registry->RegisterBooleanPref\(\s*prefs::kHttpsOnlyModeEnabled,\s*false,\s*"
+        r"user_prefs::PrefRegistrySyncable::SYNCABLE_PREF\);"
+    )
+    replacement = (
+        "registry->RegisterBooleanPref(\n"
+        "      prefs::kHttpsOnlyModeEnabled, true,  // EXTREME_PRIVACY_HTTPS_ONLY\n"
+        "      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);"
+    )
+    text, count = pattern.subn(replacement, text, count=1)
+    if count != 1:
+        fail("HTTPS-Only default anchor missing")
+    path.write_text(text)
+    print("enabled HTTPS-Only mode by default")
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         fail("usage: apply_privacy_patches.py /path/to/chromium/src")
@@ -204,6 +264,9 @@ def main() -> None:
     patch_browser_process_vpn_guard(src, repo_root)
     patch_metrics_reporting(src)
     patch_third_party_cookie_default(src)
+    patch_search_suggestions_default(src)
+    patch_preloading_default(src)
+    patch_https_only_default(src)
     print("Extreme Privacy Chromium patches applied successfully")
 
 
